@@ -1,5 +1,8 @@
+// Lädt die lokalen Umgebungsvariablen aus der .env Datei
+require('dotenv').config();
+
 const express = require('express');
-const sqlite3 = require('sqlite3').verbose();
+const { createClient } = require('@libsql/client');
 const path = require('path');
 
 const app = express();
@@ -7,75 +10,98 @@ const PORT = 3000;
 
 // WICHTIG: Erlaubt Express, JSON-Daten aus dem Frontend zu lesen
 app.use(express.json());
+
 // Bringt Express bei, die index.html einen Ordner weiter oben zu finden
 app.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, '../index.html'));
 });
-app.use(express.static(__dirname));
 
-// --- DATENBANK EINRICHTEN ---
-// '/tmp/' ist der einzige Ort, an dem Vercel Schreibrechte erlaubt
-let dbPath;
-
-if (process.env.NODE_ENV === 'production') {
-    // Wenn die App LIVE auf Vercel läuft
-    dbPath = '/tmp/lebenslaeufe.db';
-} else {
-    // Wenn die App LOKAL auf deinem PC läuft (sucht im Hauptverzeichnis, einen Ordner über 'api')
-    dbPath = path.join(__dirname, '../lebenslaeufe.db');
-}
-
-const db = new sqlite3.Database(dbPath, (err) => {
-    if (err) console.error("Datenbank-Verbindungsfehler: " + err.message);
-    else console.log(`Erfolgreich verbunden mit: ${dbPath}`);
+console.log("DEBUG URL:", process.env.TURSO_DATABASE_URL);
+console.log("DEBUG TOKEN VORHANDEN?:", process.env.TURSO_AUTH_TOKEN ? "JA" : "NEIN");
+// --- TURSO CLOUD-DATENBANK EINRICHTEN ---
+const db = createClient({
+    url: process.env.TURSO_DATABASE_URL,
+    authToken: process.env.TURSO_AUTH_TOKEN,
 });
 
-db.serialize(() => {
-    db.run(`CREATE TABLE IF NOT EXISTS profile (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        name TEXT,
-        beruf TEXT,
-        skills TEXT
-    )`);
+// Tabelle und Start-Eintrag asynchron beim Serverstart anlegen
+async function initDatabase() {
+    try {
+        await db.execute(`
+            CREATE TABLE IF NOT EXISTS profile (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT,
+                beruf TEXT,
+                skills TEXT
+            )
+        `);
 
-    db.get("SELECT COUNT(*) as count FROM profile", [], (err, row) => {
-        if (row.count === 0) {
-            db.run("INSERT INTO profile (name, beruf, skills) VALUES ('Max Mustermann', 'Softwareentwickler', 'JavaScript, HTML, CSS')");
+        const result = await db.execute("SELECT COUNT(*) as count FROM profile");
+        // Bei Turso greift man über .rows auf die Daten zu
+        const count = result.rows[0]?.count || 0;
+
+        if (count === 0) {
+            await db.execute({
+                sql: "INSERT INTO profile (name, beruf, skills) VALUES (?, ?, ?)",
+                args: ['Max Mustermann', 'Softwareentwickler', 'JavaScript, HTML, CSS']
+            });
+            console.log("Standard-Eintrag Max Mustermann wurde in der Cloud angelegt.");
         }
-    });
-});
+        console.log("Turso Cloud-Datenbank ist bereit!");
+    } catch (err) {
+        console.error("Fehler bei der Datenbank-Initialisierung:", err.message);
+    }
+}
+initDatabase();
+
 
 // --- API ROUTEN ---
 
-// 1. NEU: Lebenslauf SPEICHERN (POST)
-app.post('/api/lebenslaeufe', (req, res) => {
+// 1. Lebenslauf SPEICHERN (POST)
+app.post('/api/lebenslaeufe', async (req, res) => {
     const { name, beruf, skills } = req.body;
     
-    // Validierung: Schauen, ob alle Felder ausgefüllt sind
     if (!name || !beruf || !skills) {
         return res.status(400).json({ error: "Bitte alle Felder ausfüllen!" });
     }
 
-    const sql = "INSERT INTO profile (name, beruf, skills) VALUES (?, ?, ?)";
-    db.run(sql, [name, beruf, skills], function(err) {
-        if (err) {
-            return res.status(500).json({ error: err.message });
-        }
-        // Erfolg zurückmelden (inklusive der neuen ID aus der Datenbank)
-        res.json({ message: "Erfolgreich gespeichert!", id: this.lastID });
-    });
+    try {
+        const result = await db.execute({
+            sql: "INSERT INTO profile (name, beruf, skills) VALUES (?, ?, ?)",
+            args: [name, beruf, skills]
+        });
+        
+        // Erfolg zurückmelden (Turso liefert die neue ID in lastInsertRowid)
+        res.json({ 
+            message: "Erfolgreich gespeichert!", 
+            id: Number(result.lastInsertRowid) 
+        });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
 });
 
 // 2. Lebensläufe ABRUFEN (GET)
-app.get('/api/lebenslaeufe', (req, res) => {
-    db.all("SELECT * FROM profile", [], (err, rows) => {
-        if (err) return res.status(500).json({ error: err.message });
-        res.json(rows);
-    });
+app.get('/api/lebenslaeufe', async (req, res) => {
+    try {
+        const result = await db.execute("SELECT * FROM profile");
+        
+        // Turso gibt ein Objekt zurück, das Frontend erwartet aber ein reines Array.
+        // Deshalb mappen wir die Zeilen sauber in das gewohnte Format um:
+        const profiles = result.rows.map(row => ({
+            id: row.id,
+            name: row.name,
+            beruf: row.beruf,
+            skills: row.skills
+        }));
+
+        res.json(profiles);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
 });
 
-// Server starten
-// Nur lokal starten, Vercel übernimmt das online selbst
+// Server starten (Nur lokal)
 if (process.env.NODE_ENV !== 'production') {
     app.listen(PORT, () => {
         console.log(`Server läuft lokal unter http://localhost:${PORT}`);
