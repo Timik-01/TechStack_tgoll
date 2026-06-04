@@ -15,9 +15,19 @@ app.use(express.static(__dirname));
 
 // --- DATENBANK EINRICHTEN ---
 // '/tmp/' ist der einzige Ort, an dem Vercel Schreibrechte erlaubt
-const db = new sqlite3.Database('/tmp/lebenslaeufe.db', (err) => {
-    if (err) console.error(err.message);
-    console.log('Verbunden mit der SQLite-Datenbank.');
+let dbPath;
+
+if (process.env.NODE_ENV === 'production') {
+    // Wenn die App LIVE auf Vercel läuft
+    dbPath = '/tmp/lebenslaeufe.db';
+} else {
+    // Wenn die App LOKAL auf deinem PC läuft (sucht im Hauptverzeichnis, einen Ordner über 'api')
+    dbPath = path.join(__dirname, '../lebenslaeufe.db');
+}
+
+const db = new sqlite3.Database(dbPath, (err) => {
+    if (err) console.error("Datenbank-Verbindungsfehler: " + err.message);
+    else console.log(`Erfolgreich verbunden mit: ${dbPath}`);
 });
 
 db.serialize(() => {
