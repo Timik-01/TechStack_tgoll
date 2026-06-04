@@ -10,7 +10,8 @@ app.use(express.json());
 app.use(express.static(__dirname));
 
 // --- DATENBANK EINRICHTEN ---
-const db = new sqlite3.Database('./lebenslaeufe.db', (err) => {
+// '/tmp/' ist der einzige Ort, an dem Vercel Schreibrechte erlaubt
+const db = new sqlite3.Database('/tmp/lebenslaeufe.db', (err) => {
     if (err) console.error(err.message);
     console.log('Verbunden mit der SQLite-Datenbank.');
 });
@@ -60,6 +61,12 @@ app.get('/api/lebenslaeufe', (req, res) => {
 });
 
 // Server starten
-app.listen(PORT, () => {
-    console.log(`Server läuft unter http://localhost:${PORT}`);
-});
+// Nur lokal starten, Vercel übernimmt das online selbst
+if (process.env.NODE_ENV !== 'production') {
+    app.listen(PORT, () => {
+        console.log(`Server läuft lokal unter http://localhost:${PORT}`);
+    });
+}
+
+// WICHTIG FÜR VERCEL: Express-App exportieren
+module.exports = app;
