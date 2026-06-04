@@ -7,6 +7,10 @@ const PORT = 3000;
 
 // WICHTIG: Erlaubt Express, JSON-Daten aus dem Frontend zu lesen
 app.use(express.json());
+// Bringt Express bei, die index.html einen Ordner weiter oben zu finden
+app.get('/', (req, res) => {
+    res.sendFile(path.join(__dirname, '../index.html'));
+});
 app.use(express.static(__dirname));
 
 // --- DATENBANK EINRICHTEN ---
