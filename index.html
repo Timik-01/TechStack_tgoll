@@ -109,7 +109,12 @@
                                         <i class="bi bi-briefcase me-1"></i> ${profil.beruf}
                                     </p>
                                 </div>
-                                <span class="badge bg-light text-dark border">ID: #${profil.id}</span>
+                                <div class="d-flex align-items-center gap-2">
+                                    <span class="badge bg-light text-dark border">ID: #${profil.id}</span>
+                                    <button class="btn btn-outline-danger btn-sm py-0 px-2" onclick="loescheLebenslauf(${profil.id})" title="Löschen">
+                                        <i class="bi bi-trash3-fill"></i>
+                                    </button>
+                                </div>
                             </div>
                             <div class="bg-light p-2 rounded">
                                 <strong class="text-primary small d-block mb-1">Skills:</strong>
@@ -156,6 +161,29 @@
                 alert("Verbindung fehlgeschlagen.");
             }
         });
+
+        // 3. EINTRAG LÖSCHEN (DELETE)
+        async function loescheLebenslauf(id) {
+            if (!confirm("Möchtest du diesen Lebenslauf wirklich löschen?")) {
+                return;
+            }
+
+            try {
+                const antwort = await fetch(`/api/lebenslaeufe/${id}`, {
+                    method: 'DELETE'
+                });
+
+                if (antwort.ok) {
+                    ladeLebenslaeufe(); // Ansicht sofort aktualisieren
+                } else {
+                    const fehlerDaten = await antwort.json();
+                    alert("Fehler beim Löschen: " + (fehlerDaten.error || "Unbekannter Fehler"));
+                }
+            } catch (fehler) {
+                console.error("Fehler beim Löschen:", fehler);
+                alert("Verbindung zum Server fehlgeschlagen.");
+            }
+        }
 
         // Initiales Laden beim Seitenaufruf
         ladeLebenslaeufe();

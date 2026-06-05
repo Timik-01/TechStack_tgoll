@@ -101,6 +101,27 @@ app.get('/api/lebenslaeufe', async (req, res) => {
     }
 });
 
+// 3. Lebenslauf LÖSCHEN (DELETE)
+app.delete('/api/lebenslaeufe/:id', async (req, res) => {
+    const { id } = req.params;
+
+    try {
+        const result = await db.execute({
+            sql: "DELETE FROM profile WHERE id = ?",
+            args: [id]
+        });
+
+        // rowsAffected zeigt uns, ob wirklich etwas gelöscht wurde
+        if (result.rowsAffected === 0) {
+            return res.status(404).json({ error: "Lebenslauf mit dieser ID nicht gefunden." });
+        }
+
+        res.json({ message: "Lebenslauf erfolgreich gelöscht!" });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
 // Server starten (Nur lokal)
 if (process.env.NODE_ENV !== 'production') {
     app.listen(PORT, () => {
