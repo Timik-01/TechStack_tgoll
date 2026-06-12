@@ -15,7 +15,7 @@ app.use(express.json());
 app.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, '../index.html'));
 });
-
+require('dotenv').config({ path: path.resolve(__dirname, '../.env') });
 console.log("DEBUG URL:", process.env.TURSO_DATABASE_URL);
 console.log("DEBUG TOKEN VORHANDEN?:", process.env.TURSO_AUTH_TOKEN ? "JA" : "NEIN");
 // --- TURSO CLOUD-DATENBANK EINRICHTEN ---
